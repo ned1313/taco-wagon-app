@@ -9,8 +9,19 @@ env:
   TF_LOG: INFO
   TF_INPUT: false
   TF_VERSION: ${{ vars.TF_VERSION }}
+  ENVIRONMENTS: '["dev","staging","prodeast","prodwest"]'
 
 jobs:
+  # Setup job to output environments for matrix
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+    outputs:
+      environments: ${{ env.ENVIRONMENTS }}
+    steps:
+      - name: Output environments
+        run: echo "Environments - ${{ env.ENVIRONMENTS }}"
+
   # Format check
   format:
     name: Terraform Format
@@ -79,11 +90,15 @@ jobs:
           exit-code: 1
           severity: CRITICAL
 
-  # Terraform Plan for dev environment
+  # Terraform Plan for all environments
   plan:
-    name: Terraform Plan Dev
+    name: Terraform Plan (${{ matrix.environment }})
     runs-on: ubuntu-latest
-    needs: [format, validate, tflint, trivy]
+    needs: [setup, format, validate, tflint, trivy]
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJson(needs.setup.outputs.environments) }}
     permissions:
       contents: read
       pull-requests: write
@@ -105,15 +120,15 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Terraform Init
-        run: terraform init -backend-config="./backends/dev.hcl"
+        run: terraform init -backend-config="./backends/${{ matrix.environment }}.hcl"
 
       - name: Terraform Plan
-        run: terraform plan -var-file="./environments/dev.tfvars" -out=tf.plan
+        run: terraform plan -var-file="./environments/${{ matrix.environment }}.tfvars" -out=tf.plan
 
       - name: Upload Plan Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tf-plan-dev-${{ github.run_id }}
+          name: tf-plan-${{ matrix.environment }}-${{ github.run_id }}
           path: tf.plan
           retention-days: 5
 
@@ -132,7 +147,7 @@ jobs:
           script: |
             const fs = require('fs');
             const summary = fs.readFileSync('summary.md', 'utf8');
-            const body = `## Terraform Plan Summary - dev\n\n${summary}\n\n*Workflow Run ID: ${{ github.run_id }}*`;
+            const body = `## Terraform Plan Summary - ${{ matrix.environment }}\n\n${summary}\n\n*Workflow Run ID: ${{ github.run_id }}*`;
             
             github.rest.issues.createComment({
               issue_number: context.issue.number,
