@@ -1,4 +1,4 @@
-name: Terraform Destroy
+name: Terraform Manual Deploy
 
 on:
   workflow_dispatch:
