@@ -30,8 +30,6 @@ jobs:
   validate:
     name: Validate Confirmation
     runs-on: ubuntu-latest
-    outputs:
-      environments: ${{ steps.parse.outputs.environments }}
     steps:
       - name: Check confirmation
         if: inputs.confirm != 'deploy'
@@ -41,10 +39,10 @@ jobs:
 
   # Deploy selected environment
   deploy:
-    name: Deploy ${{ inputs.environments }}
+    name: Deploy ${{ inputs.environment }}
     needs: [validate]
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environments }}
+    environment: ${{ inputs.environment }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -63,10 +61,10 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Terraform Init
-        run: terraform init -backend-config="./backends/${{ inputs.environments }}.hcl"
+        run: terraform init -backend-config="./backends/${{ inputs.environment }}.hcl"
 
       - name: Terraform Plan
-        run: terraform plan -out=tf.plan -var-file="./environments/${{ inputs.environments }}.tfvars"
+        run: terraform plan -out=tf.plan -var-file="./environments/${{ inputs.environment }}.tfvars"
 
       - name: Setup tf-summarize
         uses: kishaningithub/setup-tf-summarize@v2
@@ -84,8 +82,8 @@ jobs:
           secret: ${{ github.token }}
           approvers: ${{ github.actor }}
           minimum-approvals: 1
-          issue-title: "Approve Terraform Apply for ${{ inputs.environments }}"
-          issue-body: "Please approve or deny the Terraform apply for the ${{ inputs.environments }} environment."
+          issue-title: "Approve Terraform Apply for ${{ inputs.environment }}"
+          issue-body: "Please approve or deny the Terraform apply for the ${{ inputs.environment }} environment."
           issue-body-file-path: summary.md
           fail-on-denial: true
 
