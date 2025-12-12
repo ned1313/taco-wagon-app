@@ -41,7 +41,6 @@ jobs:
           RUN_ID=$(gh run list \
             --repo ${{ github.repository }} \
             --workflow "Terraform CI" \
-            --commit ${{ github.sha }} \
             --status success \
             --limit 1 \
             --json databaseId \
