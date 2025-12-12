@@ -41,11 +41,13 @@ jobs:
           RUN_ID=$(gh run list \
             --repo ${{ github.repository }} \
             --workflow "Terraform CI" \
-            --branch ${{ github.head_ref }} \
+            --commit ${{ github.sha }} \
             --status success \
             --limit 1 \
             --json databaseId \
             --jq '.[0].databaseId')
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          echo "Found CI Run ID: $RUN_ID"
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
           echo "Found CI Run ID: $RUN_ID"
 
