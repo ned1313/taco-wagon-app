@@ -4,7 +4,7 @@ provider "aws" {
   default_tags {
     tags = {
       Owner   = "Ned"
-      Project = "Taco Wagon Team"
+      Project = "Taco Wagon A"
     }
   }
 }
