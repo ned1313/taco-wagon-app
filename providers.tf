@@ -3,8 +3,9 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Owner   = "Ned"
-      Project = "Taco Wagon B"
+      Owner       = "Ned"
+      Project     = "Taco Wagon B"
+      Environment = var.environment
     }
   }
 }
