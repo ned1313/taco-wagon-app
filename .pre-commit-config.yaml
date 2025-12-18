@@ -1,0 +1,34 @@
+repos:
+  - repo: local
+    hooks:
+      # Formats Terraform configuration files
+      - id: terraform-fmt
+        name: Terraform Format
+        entry: terraform fmt -recursive
+        language: system
+        files: \.tf$
+        pass_filenames: false
+
+      # Validates Terraform configuration files
+      - id: terraform-validate
+        name: Terraform Validate
+        entry: terraform validate
+        language: system
+        files: \.tf$
+        pass_filenames: false
+
+      # Runs tflint for linting
+      - id: tflint
+        name: TFLint
+        entry: tflint --config=.tflint.hcl
+        language: system
+        files: \.tf$
+        pass_filenames: false
+
+      # Generates documentation from Terraform modules
+      - id: terraform-docs
+        name: Terraform Docs
+        entry: terraform-docs markdown table --output-file TACOWAGON.md --output-mode inject .
+        language: system
+        files: \.tf$
+        pass_filenames: false
