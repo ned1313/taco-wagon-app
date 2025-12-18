@@ -1,0 +1,92 @@
+name: Terraform Manual Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prodeast
+          - prodwest
+      confirm:
+        description: 'Type "deploy" to confirm'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  TF_LOG: INFO
+  TF_INPUT: false
+  TF_VERSION: ${{ vars.TF_VERSION }}
+
+jobs:
+  # Validate confirmation
+  validate:
+    name: Validate Confirmation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        if: inputs.confirm != 'deploy'
+        run: |
+          echo "::error::Confirmation failed. You must type 'deploy' to confirm."
+          exit 1
+
+  # Deploy selected environment
+  deploy:
+    name: Deploy ${{ inputs.environment }}
+    needs: [validate]
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init -backend-config="./backends/${{ inputs.environment }}.hcl"
+
+      - name: Terraform Plan
+        run: terraform plan -out=tf.plan -var-file="./environments/${{ inputs.environment }}.tfvars"
+
+      - name: Setup tf-summarize
+        uses: kishaningithub/setup-tf-summarize@v2
+
+      - name: Generate Plan Summary
+        id: summary
+        run: |
+          terraform show -json tf.plan > plan.json
+          tf-summarize -md plan.json > summary.md
+
+      # Manual approval step
+      - name: Manual Approval
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ github.TOKEN }}
+          approvers: ${{ github.actor }}
+          minimum-approvals: 1
+          issue-title: "Approve Terraform Apply for ${{ inputs.environment }}"
+          issue-body: "Please approve or deny the Terraform apply for the ${{ inputs.environment }} environment."
+          issue-body-file-path: summary.md
+          fail-on-denial: true
+
+      - name: Terraform Apply
+        run: terraform apply tf.plan

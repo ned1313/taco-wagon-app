@@ -1,0 +1,69 @@
+name: Production Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  TF_LOG: INFO
+  TF_INPUT: false
+  TF_VERSION: ${{ vars.TF_VERSION }}
+  ENVIRONMENTS: '["prodeast", "prodwest"]'
+
+jobs:
+  # Setup job to output environments
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+    outputs:
+      environments: ${{ env.ENVIRONMENTS }}
+    steps:
+      - name: Output environments
+        run: echo "Deploying to production environments - ${{ env.ENVIRONMENTS }}"
+
+  # Get the workflow run ID from the CI workflow for artifact retrieval
+  get-run-id:
+    name: Get CI Run ID
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.get-run.outputs.run_id }}
+    steps:
+      - name: Get CI Workflow Run ID
+        id: get-run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_ID=$(gh run list \
+            --repo ${{ github.repository }} \
+            --workflow "Terraform CI" \
+            --status success \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId')
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          echo "Found CI Run ID: $RUN_ID"
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          echo "Found CI Run ID: $RUN_ID"
+
+  # Deploy to production environments in parallel
+  deploy:
+    name: Deploy ${{ matrix.environment }}
+    needs: [setup, get-run-id]
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJson(needs.setup.outputs.environments) }}
+    uses: ./.github/workflows/deploy-environment.yml
+    with:
+      environment: ${{ matrix.environment }}
+      terraform_version: ${{ vars.TF_VERSION }}
+      ci_run_id: ${{ needs.get-run-id.outputs.run_id }}
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}

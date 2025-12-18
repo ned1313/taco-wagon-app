@@ -1,0 +1,86 @@
+name: Terraform Manual Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to destroy, choose "all" to run for all environments'
+        required: true
+        type: choice
+        options:
+          - all
+          - dev
+          - staging
+          - prodeast
+          - prodwest
+      confirm:
+        description: 'Type "destroy" to confirm'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  TF_LOG: INFO
+  TF_INPUT: false
+  TF_VERSION: ${{ vars.TF_VERSION }}
+
+jobs:
+  # Validate confirmation
+  validate:
+    name: Validate Confirmation
+    runs-on: ubuntu-latest
+    outputs:
+      environments: ${{ steps.parse.outputs.environments }}
+    steps:
+      - name: Check confirmation
+        if: inputs.confirm != 'destroy'
+        run: |
+          echo "::error::Confirmation failed. You must type 'destroy' to confirm."
+          exit 1
+
+      - name: Parse environments
+        id: parse
+        run: |
+          # Handle choice input - if "all" selected, expand to all environments
+          if [ "${{ inputs.environment }}" == "all" ]; then
+            ENVS='["dev","staging","prodeast","prodwest"]'
+          else
+            ENVS='["${{ inputs.environment }}"]'
+          fi
+          echo "environments=$ENVS" >> $GITHUB_OUTPUT
+          echo "Environments to destroy: $ENVS"
+
+  # Destroy environments in parallel
+  destroy:
+    name: Destroy ${{ matrix.environment }}
+    needs: [validate]
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJson(needs.validate.outputs.environments) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init -backend-config="./backends/${{ matrix.environment }}.hcl"
+
+      - name: Terraform Destroy
+        run: terraform destroy -var-file="./environments/${{ matrix.environment }}.tfvars" -auto-approve
