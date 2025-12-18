@@ -1,0 +1,65 @@
+name: Deploy Environment
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: string
+      terraform_version:
+        description: 'Terraform version to use'
+        required: true
+        type: string
+      ci_run_id:
+        description: 'CI workflow run ID for artifact retrieval'
+        required: true
+        type: string
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AWS_REGION:
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      actions: read
+    env:
+      TF_LOG: INFO
+      TF_INPUT: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_wrapper: false
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init -backend-config="./backends/${{ inputs.environment }}.hcl"
+
+      - name: Download Plan Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tf-plan-${{ inputs.environment }}-${{ inputs.ci_run_id }}
+          run-id: ${{ inputs.ci_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Terraform Apply (from plan)
+        run: terraform apply tf.plan

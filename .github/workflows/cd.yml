@@ -41,44 +41,32 @@ jobs:
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
           echo "Found CI Run ID: $RUN_ID"
 
-  # Deploy to dev environment
+  # Deploy to each environment in sequence
+  # Each environment uses the reusable workflow and depends on the previous one
   deploy-dev:
     name: Deploy dev
     needs: [get-run-id]
-    runs-on: ubuntu-latest
-    environment: dev
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    if: github.event.pull_request.merged == true
+    uses: ./.github/workflows/deploy-environment.yml
+    with:
+      environment: dev
+      terraform_version: ${{ vars.TF_VERSION }}
+      ci_run_id: ${{ needs.get-run-id.outputs.run_id }}
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-          terraform_wrapper: false
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Terraform Init
-        run: terraform init -backend-config="./backends/dev.hcl"
-
-      # Use artifact if ci_run_id is provided
-      - name: Download Plan Artifact
-        if: needs.get-run-id.outputs.run_id != ''
-        uses: actions/download-artifact@v4
-        with:
-          name: tf-plan-dev-${{ needs.get-run-id.outputs.run_id }}
-          run-id: ${{ needs.get-run-id.outputs.run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Terraform Apply (from artifact)
-        if: needs.get-run-id.outputs.run_id != ''
-        run: terraform apply tf.plan
+  deploy-staging:
+    name: Deploy staging
+    needs: [get-run-id, deploy-dev]
+    if: github.event.pull_request.merged == true
+    uses: ./.github/workflows/deploy-environment.yml
+    with:
+      environment: staging
+      terraform_version: ${{ vars.TF_VERSION }}
+      ci_run_id: ${{ needs.get-run-id.outputs.run_id }}
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
