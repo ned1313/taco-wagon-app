@@ -3,7 +3,8 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Owner = "taco-wagon-team"
+      Owner       = "taco-wagon-team"
+      Environment = var.environment
     }
   }
 }
